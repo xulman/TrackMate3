@@ -4,8 +4,10 @@ import static org.mastodon.app.ui.ViewMenuBuilder.item;
 import static org.mastodon.app.ui.ViewMenuBuilder.menu;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -18,12 +20,15 @@ import org.mastodon.plugin.MastodonPlugin;
 import org.mastodon.plugin.MastodonPluginAppModel;
 import org.mastodon.revised.mamut.MamutAppModel;
 import org.mastodon.revised.model.AbstractModelImporter;
+import org.mastodon.revised.model.mamut.Link;
 import org.mastodon.revised.model.mamut.Model;
 import org.mastodon.revised.model.mamut.ModelGraph;
 import org.mastodon.revised.model.mamut.Spot;
 import org.mastodon.revised.ui.util.FileChooser;
+import org.mastodon.spatial.SpatioTemporalIndex;
 import org.mastodon.revised.ui.util.ExtensionFileFilter;
 import org.scijava.AbstractContextual;
+import org.scijava.log.LogService;
 import org.scijava.plugin.Plugin;
 import org.scijava.ui.behaviour.util.Actions;
 import org.scijava.ui.behaviour.util.AbstractNamedAction;
@@ -37,6 +42,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	//"IDs" of all plug-ins wrapped in this class
 	private static final String PP_IMPORT = "PP-import-all";
 	private static final String PP_EXPORT = "PP-export-all";
+	private static final String PP_EXPORTPF = "PP-export-allPerFiles";
 	//------------------------------------------------------------------------
 
 	@Override
@@ -47,7 +53,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		return Arrays.asList(
 				menu( "Plugins",
 						menu( "Point cloud",
-								item( PP_IMPORT ), item ( PP_EXPORT) ) ) );
+								item( PP_IMPORT ), item ( PP_EXPORT), item ( PP_EXPORTPF) ) ) );
 	}
 
 	/** titles of this plug-in's menu items */
@@ -55,7 +61,8 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	static
 	{
 		menuTexts.put( PP_IMPORT, "Import from TXT format" );
-		menuTexts.put( PP_EXPORT, "Export to TXT format" );
+		menuTexts.put( PP_EXPORT, "Export to TXT format (one file)" );
+		menuTexts.put( PP_EXPORTPF, "Export to TXT format (many files)" );
 	}
 
 	@Override
@@ -67,12 +74,14 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 
 	private final AbstractNamedAction actionImport;
 	private final AbstractNamedAction actionExport;
+	private final AbstractNamedAction actionExportpf;
 
 	/** default c'tor: creates Actions available from this plug-in */
 	public PointsPlugin()
 	{
-		actionImport = new RunnableAction( PP_IMPORT, this::importer );
-		actionExport = new RunnableAction( PP_EXPORT, this::exporter );
+		actionImport   = new RunnableAction( PP_IMPORT, this::importer );
+		actionExport   = new RunnableAction( PP_EXPORT, this::exporter );
+		actionExportpf = new RunnableAction( PP_EXPORTPF, this::exporterPerFile );
 		updateEnabledActions();
 	}
 
@@ -83,6 +92,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		final String[] noShortCut = new String[] {};
 		actions.namedAction( actionImport, noShortCut );
 		actions.namedAction( actionExport, noShortCut );
+		actions.namedAction( actionExportpf, noShortCut );
 	}
 
 	/** reference to the currently available project in Mastodon */
@@ -103,12 +113,10 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		final MamutAppModel appModel = ( pluginAppModel == null ) ? null : pluginAppModel.getAppModel();
 		actionImport.setEnabled( appModel != null );
 		actionExport.setEnabled( appModel != null );
+		actionExportpf.setEnabled( appModel != null );
 	}
 	//------------------------------------------------------------------------
 
-	/** opens the import dialog to find the tracks.txt file,
-	    and runs the import on the currently viewed images
-	    provided params were harvested successfully */
 	private void importer()
 	{
 		//open a folder choosing dialog
@@ -127,20 +135,31 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 
 		Scanner s = null;
 
+		//scanning params:
+		final String delim = "\t";
+		final double spotRadius = 10;
+		boolean fourthColumnIsTime = false;
+
 		//define the spot size/radius
-		final double radius = 10;
 		final double[][] cov = new double[3][3];
-		cov[0][0] = radius*radius;
-		cov[1][1] = radius*radius;
-		cov[2][2] = radius*radius;
+		cov[0][0] = spotRadius*spotRadius;
+		cov[1][1] = spotRadius*spotRadius;
+		cov[2][2] = spotRadius*spotRadius;
 
 		final Model model = pluginAppModel.getAppModel().getModel();
 		final ModelGraph graph = model.getGraph();
-		final Spot spot = graph.vertices().createRef();
+		Spot spot = graph.vertices().createRef();
+		final Spot oSpot = graph.vertices().createRef();
+		final Link linkRef = graph.edgeRef();
 
 		final AffineTransform3D transform = new AffineTransform3D();
 		pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(0,0, transform);
+
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+
 		final double[] coords = new double[3];
+		int time;
 
 		new AbstractModelImporter< Model >( model ){{ startImport(); }};
 
@@ -149,16 +168,37 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 
 			while (s.hasNext())
 			{
+				//read and prepare the spot spatial coordinate
+				s.useDelimiter(delim);
 				coords[0] = Float.parseFloat(s.next());
 				coords[1] = Float.parseFloat(s.next());
+				if (!fourthColumnIsTime) s.reset();
 				coords[2] = Float.parseFloat(s.next());
-
-				//create the spot
 				transform.apply(coords,coords);
-				graph.addVertex( spot ).init( 0, coords, cov );
+
+				if (fourthColumnIsTime)
+				{
+					//add to the parsed-out time
+					s.reset();
+					time = Integer.parseInt(s.next());
+					graph.addVertex( spot ).init( time, coords, cov );
+				}
+				else
+				{
+					//add to all time points available, connect them with edges
+					spot = graph.addVertex( spot ).init( timeF, coords, cov );
+					oSpot.refTo(spot);
+
+					for (int t = timeF+1; t <= timeT; ++t)
+					{
+						spot = graph.addVertex( spot ).init( t, coords, cov );
+						graph.addEdge( oSpot, spot, linkRef ).init();
+						oSpot.refTo(spot);
+					}
+				}
 			}
 		} catch (IOException e) {
-			//anyway, send the original error message further
+			//report the original error message further
 			e.printStackTrace();
 		} finally {
 			if (s != null)
@@ -166,14 +206,15 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 				s.close();
 			}
 			graph.vertices().releaseRef(spot);
+			graph.vertices().releaseRef(oSpot);
+			graph.releaseRef(linkRef);
 			new AbstractModelImporter< Model >( model ){{ finishImport(); }};
 		}
 
-		this.context().getService("LogService.class").log().info("Loaded file: "+selectedFile.getAbsolutePath());
+		this.context().getService(LogService.class).log().info("Loaded file: "+selectedFile.getAbsolutePath());
 	}
 
-	/** opens the export dialog, and runs the export
-	    provided params were harvested successfully */
+
 	private void exporter()
 	{
 		//open a folder choosing dialog
@@ -186,10 +227,87 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		//cancel button ?
 		if (selectedFile == null) return;
 
-		//check we can open the file; and complain if not
-		if (selectedFile.canWrite() == false)
-			throw new IllegalArgumentException("Cannot write the selected file: "+selectedFile.getAbsolutePath());
+		//writing params:
+		final String delim = "\t";
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
 
-		System.out.println("writer");
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+		BufferedWriter f;
+
+		try
+		{
+			f = new BufferedWriter( new FileWriter(selectedFile.getAbsolutePath()) );
+
+			for (int t = timeF; t <= timeT; ++t)
+			for (final Spot s : spots.getSpatialIndex(t))
+			{
+				f.write(s.getFloatPosition(0)+delim
+						 +s.getFloatPosition(1)+delim
+						 +s.getFloatPosition(2)+delim
+						 +t);
+				f.newLine();
+			}
+			f.close();
+		}
+		catch (IOException e) {
+			//report the original error message further
+			e.printStackTrace();
+		}
+
+		this.context().getService(LogService.class).log().info("Wrote file: "+selectedFile.getAbsolutePath());
+	}
+
+
+	private void exporterPerFile()
+	{
+		//open a folder choosing dialog
+		File selectedFolder = FileChooser.chooseFile(null, null,
+				new ExtensionFileFilter("txt"),
+				"Choose folder to write TXT files with point clouds:",
+				FileChooser.DialogType.SAVE,
+				FileChooser.SelectionMode.DIRECTORIES_ONLY);
+
+		//cancel button ?
+		if (selectedFolder == null) return;
+
+		//check we can open the file; and complain if not
+		if (selectedFolder.canWrite() == false)
+			throw new IllegalArgumentException("Cannot write to the selected folder: "+selectedFolder.getAbsolutePath());
+
+		//writing params:
+		final String delim = "\t";
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+		final String fileNamePattern = "pointCloud_t%03d.txt";
+
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+		BufferedWriter f;
+
+		try
+		{
+			for (int t = timeF; t <= timeT; ++t)
+			{
+				f = new BufferedWriter( new FileWriter(
+					selectedFolder.getAbsolutePath() + File.separator + String.format(fileNamePattern,t)
+					) );
+
+				for (final Spot s : spots.getSpatialIndex(t))
+				{
+					f.write(s.getFloatPosition(0)+delim
+					       +s.getFloatPosition(1)+delim
+					       +s.getFloatPosition(2));
+					f.newLine();
+				}
+
+				f.close();
+			}
+		}
+		catch (IOException e) {
+			//report the original error message further
+			e.printStackTrace();
+		}
+
+		this.context().getService(LogService.class).log().info("Done exporting.");
 	}
 }
