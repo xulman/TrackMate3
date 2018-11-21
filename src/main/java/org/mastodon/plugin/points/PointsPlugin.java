@@ -40,8 +40,9 @@ import net.imglib2.realtransform.AffineTransform3D;
 public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 {
 	//"IDs" of all plug-ins wrapped in this class
-	private static final String PP_IMPORT = "PP-import-all";
-	private static final String PP_EXPORT = "PP-export-all";
+	private static final String PP_IMPORT   = "PP-import-all";
+	private static final String PP_IMPORTFC = "PP-import-allFourColumns";
+	private static final String PP_EXPORT   = "PP-export-all";
 	private static final String PP_EXPORTPF = "PP-export-allPerFiles";
 	//------------------------------------------------------------------------
 
@@ -53,15 +54,17 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		return Arrays.asList(
 				menu( "Plugins",
 						menu( "Point cloud",
-								item( PP_IMPORT ), item ( PP_EXPORT), item ( PP_EXPORTPF) ) ) );
+								item( PP_IMPORT ), item( PP_IMPORTFC ),
+								item( PP_EXPORT ), item( PP_EXPORTPF ) ) ) );
 	}
 
 	/** titles of this plug-in's menu items */
 	private static Map< String, String > menuTexts = new HashMap<>();
 	static
 	{
-		menuTexts.put( PP_IMPORT, "Import from TXT format" );
-		menuTexts.put( PP_EXPORT, "Export to TXT format (one file)" );
+		menuTexts.put( PP_IMPORT,   "Import from TXT format (3 cols)" );
+		menuTexts.put( PP_IMPORTFC, "Import from TXT format (4 cols)" );
+		menuTexts.put( PP_EXPORT,   "Export to TXT format (one file)" );
 		menuTexts.put( PP_EXPORTPF, "Export to TXT format (many files)" );
 	}
 
@@ -73,14 +76,16 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	//------------------------------------------------------------------------
 
 	private final AbstractNamedAction actionImport;
+	private final AbstractNamedAction actionImportfc;
 	private final AbstractNamedAction actionExport;
 	private final AbstractNamedAction actionExportpf;
 
 	/** default c'tor: creates Actions available from this plug-in */
 	public PointsPlugin()
 	{
-		actionImport   = new RunnableAction( PP_IMPORT, this::importer );
-		actionExport   = new RunnableAction( PP_EXPORT, this::exporter );
+		actionImport   = new RunnableAction( PP_IMPORT,   this::importer );
+		actionImportfc = new RunnableAction( PP_IMPORTFC, this::importerFC );
+		actionExport   = new RunnableAction( PP_EXPORT,   this::exporter );
 		actionExportpf = new RunnableAction( PP_EXPORTPF, this::exporterPerFile );
 		updateEnabledActions();
 	}
@@ -90,8 +95,9 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	public void installGlobalActions( final Actions actions )
 	{
 		final String[] noShortCut = new String[] {};
-		actions.namedAction( actionImport, noShortCut );
-		actions.namedAction( actionExport, noShortCut );
+		actions.namedAction( actionImport,   noShortCut );
+		actions.namedAction( actionImportfc, noShortCut );
+		actions.namedAction( actionExport,   noShortCut );
 		actions.namedAction( actionExportpf, noShortCut );
 	}
 
@@ -111,13 +117,20 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	private void updateEnabledActions()
 	{
 		final MamutAppModel appModel = ( pluginAppModel == null ) ? null : pluginAppModel.getAppModel();
-		actionImport.setEnabled( appModel != null );
-		actionExport.setEnabled( appModel != null );
+		actionImport.setEnabled(   appModel != null );
+		actionImportfc.setEnabled( appModel != null );
+		actionExport.setEnabled(   appModel != null );
 		actionExportpf.setEnabled( appModel != null );
 	}
 	//------------------------------------------------------------------------
 
 	private void importer()
+	{ importerGeneric(false); }
+
+	private void importerFC()
+	{ importerGeneric(true); }
+
+	private void importerGeneric(final boolean fourthColumnIsTime)
 	{
 		//open a folder choosing dialog
 		File selectedFile = FileChooser.chooseFile(null, null,
@@ -139,7 +152,6 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		//scanning params:
 		final String delim = "\t";
 		final double spotRadius = 10;
-		boolean fourthColumnIsTime = false;
 		//-------------------------------------------------
 
 		//define the spot size/radius
@@ -256,9 +268,9 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 				transform.apply(coords,coords);
 
 				f.write(coords[0]+delim
-						 +coords[1]+delim
-						 +coords[2]+delim
-						 +t);
+				       +coords[1]+delim
+				       +coords[2]+delim
+				       +t);
 				f.newLine();
 			}
 			f.close();
