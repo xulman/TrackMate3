@@ -135,10 +135,12 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 
 		Scanner s = null;
 
+		//-------------------------------------------------
 		//scanning params:
 		final String delim = "\t";
 		final double spotRadius = 10;
 		boolean fourthColumnIsTime = false;
+		//-------------------------------------------------
 
 		//define the spot size/radius
 		final double[][] cov = new double[3][3];
@@ -227,10 +229,17 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		//cancel button ?
 		if (selectedFile == null) return;
 
+		//-------------------------------------------------
 		//writing params:
 		final String delim = "\t";
 		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
 		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+		//-------------------------------------------------
+
+		AffineTransform3D transform = new AffineTransform3D();
+		pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(0,0, transform);
+		transform = transform.inverse();
+		final double[] coords = new double[3];
 
 		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
 		BufferedWriter f;
@@ -242,9 +251,13 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 			for (int t = timeF; t <= timeT; ++t)
 			for (final Spot s : spots.getSpatialIndex(t))
 			{
-				f.write(s.getFloatPosition(0)+delim
-						 +s.getFloatPosition(1)+delim
-						 +s.getFloatPosition(2)+delim
+				//convert spot's coordinate into underlying image coordinate system
+				s.localize(coords);
+				transform.apply(coords,coords);
+
+				f.write(coords[0]+delim
+						 +coords[1]+delim
+						 +coords[2]+delim
 						 +t);
 				f.newLine();
 			}
@@ -275,11 +288,18 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		if (selectedFolder.canWrite() == false)
 			throw new IllegalArgumentException("Cannot write to the selected folder: "+selectedFolder.getAbsolutePath());
 
+		//-------------------------------------------------
 		//writing params:
 		final String delim = "\t";
 		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
 		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
 		final String fileNamePattern = "pointCloud_t%03d.txt";
+		//-------------------------------------------------
+
+		AffineTransform3D transform = new AffineTransform3D();
+		pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(0,0, transform);
+		transform = transform.inverse();
+		final double[] coords = new double[3];
 
 		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
 		BufferedWriter f;
@@ -294,9 +314,13 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 
 				for (final Spot s : spots.getSpatialIndex(t))
 				{
-					f.write(s.getFloatPosition(0)+delim
-					       +s.getFloatPosition(1)+delim
-					       +s.getFloatPosition(2));
+					//convert spot's coordinate into underlying image coordinate system
+					s.localize(coords);
+					transform.apply(coords,coords);
+
+					f.write(coords[0]+delim
+					       +coords[1]+delim
+					       +coords[2]);
 					f.newLine();
 				}
 
