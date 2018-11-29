@@ -60,18 +60,13 @@ public class Mastodon extends ContextCommand
 //		final MamutProject project = new MamutProject( new File( "samples/mamutproject" ), new File( bdvFile ) );
 //		final MamutProject project = new MamutProjectIO().load( "/Volumes/External/Data/Mastodon/Tassos200" );
 //		final MamutProject project = new MamutProject( null, new File( "x=1000 y=1000 z=100 sx=1 sy=1 sz=10 t=400.dummy" ) );
-		final MamutProject project = new MamutProjectIO().load( "samples/mamutproject.mastodon" );
+		final MamutProject project = new MamutProjectIO().load( "/Users/ulman/DATA/CTC2/T_carto_forMastodon/corrections/" );
 
 		windowManager.projectManager.open( project );
 //		mw.proposedProjectFile = new File( "/Users/pietzsch/Desktop/data/TGMM_METTE/project2.xml" );
 //		mw.loadProject( new File( "/Users/pietzsch/Desktop/data/TGMM_METTE/project.xml" ) );
 //		mw.createProject();
 //		mw.loadProject();
-		SwingUtilities.invokeAndWait( () -> {
-			windowManager.createBigDataViewer();
-			windowManager.createTrackScheme();
-//			YamlConfigIO.write( new InputTriggerDescriptionsBuilder( keyconf ).getDescriptions(), new PrintWriter( System.out ) );
-		} );
 
 //		DumpInputConfig.writeDefaultConfigToYaml( System.getProperty( "user.home" ) + "/Desktop/DEFAULT.keyconfig.yaml", new Context() );
 	}
