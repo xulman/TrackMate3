@@ -16,6 +16,9 @@ import java.util.Map;
 import java.util.Scanner;
 
 import org.mastodon.app.ui.ViewMenuBuilder;
+import org.mastodon.collection.RefCollections;
+import org.mastodon.collection.RefList;
+import org.mastodon.graph.algorithm.RootFinder;
 import org.mastodon.plugin.MastodonPlugin;
 import org.mastodon.plugin.MastodonPluginAppModel;
 import org.mastodon.revised.mamut.MamutAppModel;
@@ -44,6 +47,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	private static final String PP_IMPORTFC = "PP-import-allFourColumns";
 	private static final String PP_EXPORT   = "PP-export-all";
 	private static final String PP_EXPORTPF = "PP-export-allPerFiles";
+	private static final String PP_EXPORTTT = "PP-export-txttracks";
 	//------------------------------------------------------------------------
 
 	@Override
@@ -55,7 +59,8 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 				menu( "Plugins",
 						menu( "Point cloud",
 								item( PP_IMPORT ), item( PP_IMPORTFC ),
-								item( PP_EXPORT ), item( PP_EXPORTPF ) ) ) );
+								item( PP_EXPORT ), item( PP_EXPORTPF ),
+								item( PP_EXPORTTT ) ) ) );
 	}
 
 	/** titles of this plug-in's menu items */
@@ -66,6 +71,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		menuTexts.put( PP_IMPORTFC, "Import from TXT format (4 cols)" );
 		menuTexts.put( PP_EXPORT,   "Export to TXT format (one file)" );
 		menuTexts.put( PP_EXPORTPF, "Export to TXT format (many files)" );
+		menuTexts.put( PP_EXPORTTT, "Export all tracks to TXT" );
 	}
 
 	@Override
@@ -79,6 +85,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 	private final AbstractNamedAction actionImportfc;
 	private final AbstractNamedAction actionExport;
 	private final AbstractNamedAction actionExportpf;
+	private final AbstractNamedAction actionExporttt;
 
 	/** default c'tor: creates Actions available from this plug-in */
 	public PointsPlugin()
@@ -87,6 +94,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		actionImportfc = new RunnableAction( PP_IMPORTFC, this::importerFC );
 		actionExport   = new RunnableAction( PP_EXPORT,   this::exporter );
 		actionExportpf = new RunnableAction( PP_EXPORTPF, this::exporterPerFile );
+		actionExporttt = new RunnableAction( PP_EXPORTTT, this::exporterAllTracks );
 		updateEnabledActions();
 	}
 
@@ -99,6 +107,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		actions.namedAction( actionImportfc, noShortCut );
 		actions.namedAction( actionExport,   noShortCut );
 		actions.namedAction( actionExportpf, noShortCut );
+		actions.namedAction( actionExporttt, noShortCut );
 	}
 
 	/** reference to the currently available project in Mastodon */
@@ -121,6 +130,7 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		actionImportfc.setEnabled( appModel != null );
 		actionExport.setEnabled(   appModel != null );
 		actionExportpf.setEnabled( appModel != null );
+		actionExporttt.setEnabled( appModel != null );
 	}
 	//------------------------------------------------------------------------
 
@@ -345,5 +355,111 @@ public class PointsPlugin extends AbstractContextual implements MastodonPlugin
 		}
 
 		this.context().getService(LogService.class).log().info("Done exporting.");
+	}
+
+
+	private void exporterAllTracks()
+	{
+		final ModelGraph modelGraph = pluginAppModel.getAppModel().getModel().getGraph();
+
+		// Collect roots, as candidates for single tracks.
+		final RefList< Spot > roots = RefCollections.createRefList( modelGraph.vertices() );
+		roots.addAll( RootFinder.getRoots( modelGraph ) );
+
+		final Link lRef = modelGraph.edgeRef();              //link reference
+		final Spot sRef = modelGraph.vertices().createRef(); //spot reference
+		final Spot fRef = modelGraph.vertices().createRef(); //some spot's future buddy
+
+		int trackNo = 0;
+
+		//now sweep from all roots until:
+		// - division event is detected, in which case add new branches into 'roots'
+		// - merging event is detected, in which case add the "common branch" into 'roots'
+		// in any case of the two: stop sweeping the current track
+		while (roots.size() > 0)
+		{
+			//take out and use the first (aka next available) root
+			final Spot s = roots.remove(0);
+			boolean keepSweeping = true;
+			++trackNo;
+			int trackLength = 0;
+
+			//start following the new track
+			while (keepSweeping)
+			{
+				//find how many back- and forward-references (time-wise) this spot has
+				int countBackwardLinks = 0;
+				int countForwardLinks = 0;
+
+				for (int n=0; n < s.incomingEdges().size(); ++n)
+				{
+					s.incomingEdges().get(n, lRef).getSource( sRef );
+					if (sRef.getTimepoint() < s.getTimepoint()) ++countBackwardLinks;
+					if (sRef.getTimepoint() > s.getTimepoint())
+					{
+						++countForwardLinks;
+						fRef.refTo( sRef );
+					}
+				}
+				for (int n=0; n < s.outgoingEdges().size(); ++n)
+				{
+					s.outgoingEdges().get(n, lRef).getTarget( sRef );
+					if (sRef.getTimepoint() < s.getTimepoint()) ++countBackwardLinks;
+					if (sRef.getTimepoint() > s.getTimepoint())
+					{
+						++countForwardLinks;
+						fRef.refTo( sRef );
+					}
+				}
+
+				//merging event?
+				if (countBackwardLinks > 1 && trackLength > 0)
+				{
+					//make it a new root only if we got to this spot-root by following some track
+					if (!roots.contains(s)) roots.add(s);
+					keepSweeping = false;
+				}
+				else
+				{
+					++trackLength;
+					//report the current spot
+					System.out.println(trackNo+"\t"+s.getTimepoint()+"\t"+s.getLabel());
+				}
+
+				//division event?
+				if (countForwardLinks > 1)
+				{
+					//iterate over all branches
+					for (int n=0; n < s.incomingEdges().size(); ++n)
+					{
+						s.incomingEdges().get(n, lRef).getSource( sRef );
+						if (sRef.getTimepoint() > s.getTimepoint()) roots.add(sRef);
+					}
+					for (int n=0; n < s.outgoingEdges().size(); ++n)
+					{
+						s.outgoingEdges().get(n, lRef).getTarget( sRef );
+						if (sRef.getTimepoint() > s.getTimepoint()) roots.add(sRef);
+					}
+					keepSweeping = false;
+				}
+
+				if (countForwardLinks == 0)
+					keepSweeping = false;
+				else
+					s.refTo(sRef);
+			}
+
+			//finish the report of a track
+			if (roots.size() > 0)
+			{
+				//do report footer here
+				System.out.println("\n");
+			}
+		}
+
+		//release the aux "binder" objects
+		modelGraph.vertices().releaseRef(fRef);
+		modelGraph.vertices().releaseRef(sRef);
+		modelGraph.releaseRef(lRef);
 	}
 }
