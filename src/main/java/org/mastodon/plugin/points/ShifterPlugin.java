@@ -141,6 +141,8 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 				p.setPosition(pxCoords);
 
 				//scan along z and find slice with max intensity
+
+				//find the max intensity +-3px around the current z-coord
 				float val = 0;
 				final long zOrig = Math.round(coords[2]);
 				long zAtVal = zOrig;
@@ -155,7 +157,13 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 				}
 
 				//don't move if detection would suggest to move too far
-				if (Math.abs(zAtVal-zOrig) > 5) zAtVal = zOrig;
+				if (Math.abs(zAtVal-zOrig) > 3)
+				{
+					zAtVal = zOrig;
+					s.setLabel( s.getLabel() + " noZ" );
+				}
+				else
+					s.setLabel( s.getLabel() + String.format(" %+dZ", zAtVal-zOrig) );
 
 				s.setPosition(zAtVal,2); //should go through transform...
 			}
@@ -200,8 +208,9 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 				pxCoords[2] = Math.round(coords[2]);
 				p.setPosition(pxCoords);
 
+				float val;
 				int iters = 0;
-				while (iters < 5)
+				do
 				{
 					//check values for xy gradient at this position
 					p.fwd(0);
@@ -217,7 +226,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 					p.fwd(1);
 
 					//sq. of gradient
-					float val = (float)Math.sqrt( DX*DX + DY*DY ) / 2.f;
+					val = (float)Math.sqrt( DX*DX + DY*DY ) / 2.f;
 
 					f.write(s.getLabel()+" "+iters+" :\t"+val+"\t"+DX+"\t"+DY+"\t\t"+pxCoords[0]+"\t"+pxCoords[1]+"\t"+pxCoords[2]);
 					f.newLine();
@@ -229,16 +238,11 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 						pxCoords[0] += Math.round( Math.cos(azimuth) );
 						pxCoords[1] += Math.round( Math.sin(azimuth) );
 						p.setPosition(pxCoords);
+						++iters;
 					}
-					else
-					{
-						//no adjustment & stop iterating
-						iters = 5;
-					}
+				} while (val > 20 && iters < 7);
 
-					++iters;
-				}
-
+				s.setLabel( s.getLabel() + String.format(" %dXY", iters) );
 				s.setPosition(pxCoords[0],0); //should go through transform...
 				s.setPosition(pxCoords[1],1); //should go through transform...
 			}
