@@ -17,7 +17,9 @@ import org.mastodon.plugin.MastodonPluginAppModel;
 import org.mastodon.revised.mamut.MamutAppModel;
 import org.mastodon.revised.model.AbstractModelImporter;
 import org.mastodon.revised.model.mamut.Model;
+import org.mastodon.revised.model.mamut.ModelGraph;
 import org.mastodon.revised.model.mamut.Spot;
+import org.mastodon.revised.model.mamut.Link;
 import org.mastodon.spatial.SpatioTemporalIndex;
 import org.scijava.AbstractContextual;
 import org.scijava.log.LogService;
@@ -37,8 +39,10 @@ import net.imglib2.view.Views;
 public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 {
 	//"IDs" of all plug-ins wrapped in this class
-	private static final String SP_ANALYZE = "SP-analyze";
-	private static final String SP_PROCESS	= "SP-process";
+	private static final String SP_Z_SHIFT  = "SP-zshift";
+	private static final String SP_Z_SMOOTH = "SP-zsmooth";
+	private static final String SP_XY_SHIFT  = "SP-xyshift";
+	private static final String SP_XY_SMOOTH = "SP-xysmooth";
 	//------------------------------------------------------------------------
 
 	@Override
@@ -48,15 +52,18 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 		//the titles of the items are defined right below
 		return Arrays.asList(
 				menu( "Plugins",
-								item( SP_ANALYZE ), item( SP_PROCESS ) ) );
+								item( SP_Z_SHIFT ), item( SP_Z_SMOOTH ),
+								item( SP_XY_SHIFT ), item( SP_XY_SMOOTH ) ) );
 	}
 
 	/** titles of this plug-in's menu items */
 	private static Map< String, String > menuTexts = new HashMap<>();
 	static
 	{
-		menuTexts.put( SP_ANALYZE, "Shift points along z to close int. max");
-		menuTexts.put( SP_PROCESS, "Shift points along xy-gradients a little");
+		menuTexts.put( SP_Z_SHIFT,  "Shift points along z to close int. max");
+		menuTexts.put( SP_Z_SMOOTH, "Shift points along z by z-coord smoothing");
+		menuTexts.put( SP_XY_SHIFT,  "Shift points along xy-gradients a little");
+		menuTexts.put( SP_XY_SMOOTH, "Shift points along xy by xy-coord smoothing");
 	}
 
 	@Override
@@ -66,14 +73,18 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	}
 	//------------------------------------------------------------------------
 
-	private final AbstractNamedAction actionAnalyze;
-	private final AbstractNamedAction actionProcess;
+	private final AbstractNamedAction actionZShift;
+	private final AbstractNamedAction actionZSmooth;
+	private final AbstractNamedAction actionXYShift;
+	private final AbstractNamedAction actionXYSmooth;
 
 	/** default c'tor: creates Actions available from this plug-in */
 	public ShifterPlugin()
 	{
-		actionAnalyze = new RunnableAction( SP_ANALYZE, this::pointsZShifter );
-		actionProcess = new RunnableAction( SP_PROCESS, this::pointsXYShifter);
+		actionZShift  = new RunnableAction( SP_Z_SHIFT,  this::pointsZShifter );
+		actionZSmooth = new RunnableAction( SP_Z_SMOOTH, this::pointsZSmoother );
+		actionXYShift  = new RunnableAction( SP_XY_SHIFT,  this::pointsXYShifter);
+		actionXYSmooth = new RunnableAction( SP_XY_SMOOTH, this::pointsXYSmoother);
 		updateEnabledActions();
 	}
 
@@ -82,8 +93,10 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	public void installGlobalActions( final Actions actions )
 	{
 		final String[] noShortCut = new String[] {};
-		actions.namedAction( actionAnalyze, noShortCut );
-		actions.namedAction( actionProcess, noShortCut );
+		actions.namedAction( actionZShift,  noShortCut );
+		actions.namedAction( actionZSmooth, noShortCut );
+		actions.namedAction( actionXYShift,  noShortCut );
+		actions.namedAction( actionXYSmooth, noShortCut );
 	}
 
 	/** reference to the currently available project in Mastodon */
@@ -102,8 +115,10 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	private void updateEnabledActions()
 	{
 		final MamutAppModel appModel = ( pluginAppModel == null ) ? null : pluginAppModel.getAppModel();
-		actionAnalyze.setEnabled( appModel != null );
-		actionProcess.setEnabled( appModel != null );
+		actionZShift.setEnabled(  appModel != null );
+		actionZSmooth.setEnabled( appModel != null );
+		actionXYShift.setEnabled(  appModel != null );
+		actionXYSmooth.setEnabled( appModel != null );
 	}
 	//------------------------------------------------------------------------
 
@@ -170,8 +185,48 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 		}
 		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
 
-		this.context().getService(LogService.class).log().info("done.");
+		this.context().getService(LogService.class).log().info("done z max crawler.");
 	}
+
+	private void pointsZSmoother()
+	{
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+
+		final ModelGraph modelGraph = pluginAppModel.getAppModel().getModel().getGraph();
+		final Link lRef = modelGraph.edgeRef();
+		final Spot[] ss = new Spot[2];
+		ss[0] = modelGraph.vertices().createRef();
+		ss[1] = modelGraph.vertices().createRef();
+
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
+
+		for (int t = timeF; t <= timeT; ++t)
+		{
+			for (final Spot s : spots.getSpatialIndex(t))
+			if ( (s.incomingEdges().size() + s.outgoingEdges().size()) == 2 )
+			{
+				int c=0;
+				for (int n=0; n < s.incomingEdges().size(); ++n)
+					s.incomingEdges().get(n, lRef).getSource( ss[c++] );
+
+				for (int n=0; n < s.outgoingEdges().size(); ++n)
+					s.outgoingEdges().get(n, lRef).getTarget( ss[c++] );
+
+				final float avgZ = s.getFloatPosition(2) + ss[0].getFloatPosition(2) + ss[1].getFloatPosition(2);
+				s.setPosition( avgZ / 3.f, 2 );
+			}
+		}
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
+
+		modelGraph.releaseRef(lRef);
+		modelGraph.vertices().releaseRef(ss[0]);
+		modelGraph.vertices().releaseRef(ss[1]);
+
+		this.context().getService(LogService.class).log().info("done z smoother.");
+	}
+	//------------------------------------------------------------------------
 
 	private void pointsXYShifter()
 	{
@@ -255,6 +310,48 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 			e.printStackTrace();
 		}
 
-		this.context().getService(LogService.class).log().info("done.");
+		this.context().getService(LogService.class).log().info("done xy grad crawler.");
+	}
+
+	private void pointsXYSmoother()
+	{
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+
+		final ModelGraph modelGraph = pluginAppModel.getAppModel().getModel().getGraph();
+		final Link lRef = modelGraph.edgeRef();
+		final Spot[] ss = new Spot[2];
+		ss[0] = modelGraph.vertices().createRef();
+		ss[1] = modelGraph.vertices().createRef();
+
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
+
+		for (int t = timeF; t <= timeT; ++t)
+		{
+			for (final Spot s : spots.getSpatialIndex(t))
+			if ( (s.incomingEdges().size() + s.outgoingEdges().size()) == 2 )
+			{
+				int c=0;
+				for (int n=0; n < s.incomingEdges().size(); ++n)
+					s.incomingEdges().get(n, lRef).getSource( ss[c++] );
+
+				for (int n=0; n < s.outgoingEdges().size(); ++n)
+					s.outgoingEdges().get(n, lRef).getTarget( ss[c++] );
+
+				float avgC = s.getFloatPosition(0) + ss[0].getFloatPosition(0) + ss[1].getFloatPosition(0);
+				s.setPosition( avgC / 3.f, 0 );
+
+				avgC = s.getFloatPosition(1) + ss[0].getFloatPosition(1) + ss[1].getFloatPosition(1);
+				s.setPosition( avgC / 3.f, 1 );
+			}
+		}
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
+
+		modelGraph.releaseRef(lRef);
+		modelGraph.vertices().releaseRef(ss[0]);
+		modelGraph.vertices().releaseRef(ss[1]);
+
+		this.context().getService(LogService.class).log().info("done xy smoother.");
 	}
 }
