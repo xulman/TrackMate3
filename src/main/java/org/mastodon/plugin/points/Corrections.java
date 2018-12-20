@@ -340,7 +340,7 @@ public class Corrections
 		v.add(new int[] {1320,1334,10});
 		v.add(new int[] {1340,1345,10});
 		v.add(new int[] {1306,1372,10});
-		corr.put(1, v);
+		corr.put(105, v);
 
 		v = new Vector<>(80);
 		v.add(new int[] {642,828,10});
@@ -367,7 +367,7 @@ public class Corrections
 		v.add(new int[] {1423,1271,10});
 		v.add(new int[] {1403,1386,10});
 		v.add(new int[] {1361,1389,10});
-		corr.put(50, v);
+		corr.put(154, v);
 
 		v = new Vector<>(80);
 		v.add(new int[] {317,354,12});
@@ -495,7 +495,7 @@ public class Corrections
 		v.add(new int[] {1103,1096,12});
 		v.add(new int[] {1137,1123,12});
 		v.add(new int[] {1387,1274,12});
-		corr.put(57, v);
+		corr.put(161, v);
 
 		v = new Vector<>(80);
 		v.add(new int[] {1103,712,10});
@@ -513,7 +513,7 @@ public class Corrections
 		v.add(new int[] {1509,799,10});
 		v.add(new int[] {1279,827,10});
 		v.add(new int[] {1440,893,10});
-		corr.put(104, v);
+		corr.put(208, v);
 
 		v = new Vector<>(80);
 		v.add(new int[] {1588,588,10});
@@ -534,6 +534,6 @@ public class Corrections
 		v.add(new int[] {786,749,10});
 		v.add(new int[] {1509,750,10});
 		v.add(new int[] {1571,750,10});
-		corr.put(130, v);
+		corr.put(234, v);
 	}
 }
