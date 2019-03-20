@@ -1,6 +1,7 @@
 package org.mastodon.plugin.points;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.Vector;
 
@@ -23,6 +24,8 @@ public class Corrections
 	//data holder: time -> [[ x,y,z ]]
 	HashMap<Integer, Vector<int[]>> corr = new HashMap<>(5);
 
+	HashSet<Integer> usedSTpos = new HashSet<>(1000);
+
 	public
 	int suggestZ(final int time, final int x, final int y)
 	{
@@ -31,7 +34,15 @@ public class Corrections
 
 		for (int i=0; i < v.size(); ++i)
 		if (v.get(i)[0] == x && v.get(i)[1] == y)
+		{
+			int code = time << 20 | x << 11 | y;
+			if (usedSTpos.contains(code))
+				System.out.println("Reusing time="+time+", x="+x+", y="+y);
+			else
+				usedSTpos.add(code);
+
 			return v.get(i)[2];
+		}
 
 		return -1;
 	}
@@ -40,6 +51,25 @@ public class Corrections
 	Set<Integer> listTimePoints()
 	{
 		return corr.keySet();
+	}
+
+	public
+	void reportUnusedCorrections()
+	{
+		for (Integer time : corr.keySet())
+		{
+			Vector<int[]> v = corr.get(time);
+			for (int i=0; i < v.size(); ++i)
+			{
+				int x = v.get(i)[0];
+				int y = v.get(i)[1];
+				int z = v.get(i)[2];
+
+				int code = time << 20 | x << 11 | y;
+				if (!usedSTpos.contains(code))
+					System.out.println("Not used time="+time+", x="+x+", y="+y+", newz="+z);
+			}
+		}
 	}
 
 	public static void main(final String... args)
