@@ -157,9 +157,10 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 					(int)Math.round(coords[0]),
 					(int)Math.round(coords[1]) );
 
-				if (newz > -1)
+				if (newz > -1 && (double)newz != coords[2])
 				{
-					System.out.println("should shift from "+Util.printCoordinates(s)+" to newz="+newz);
+					System.out.println(String.format("%03d: ",t)
+					  +"should shift from "+Util.printCoordinates(s)+" to newz="+newz);
 
 					coords[2] = newz;
 					transform.applyInverse(coords,coords);
