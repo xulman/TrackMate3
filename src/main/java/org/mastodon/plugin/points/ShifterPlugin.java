@@ -32,6 +32,7 @@ import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.realtransform.AffineTransform3D;
 import net.imglib2.type.numeric.RealType;
+import net.imglib2.util.Util;
 import net.imglib2.view.ExtendedRandomAccessibleInterval;
 import net.imglib2.view.Views;
 
@@ -60,7 +61,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	private static Map< String, String > menuTexts = new HashMap<>();
 	static
 	{
-		menuTexts.put( SP_Z_SHIFT,  "Shift points along z to close int. max");
+		menuTexts.put( SP_Z_SHIFT,  "HARDCODED Z SHIFTS");
 		menuTexts.put( SP_Z_SMOOTH, "Shift points along z by z-coord smoothing");
 		menuTexts.put( SP_XY_SHIFT,  "Shift points along xy-gradients a little");
 		menuTexts.put( SP_XY_SMOOTH, "Shift points along xy by xy-coord smoothing");
@@ -124,25 +125,19 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 	private void pointsZShifter()
 	{
+		final Corrections corrector = new Corrections(2);
+
 		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
-		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
-		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
 
 		final double[] coords = new double[3];
-		final long[] pxCoords = new long[3];
 
 		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
 
-		for (int t = timeF; t <= timeT; ++t)
+		for (Integer t : corrector.listTimePoints())
 		{
 			AffineTransform3D transform = new AffineTransform3D();
 			pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(t,0, transform);
 			transform = transform.inverse();
-
-			@SuppressWarnings("unchecked")
-			RandomAccessibleInterval<? extends RealType<?>> img = (RandomAccessibleInterval<? extends RealType<?>>) pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSource(t,0);
-			ExtendedRandomAccessibleInterval<? extends RealType<?>, ?> imgB = Views.extendBorder(img);
-			RandomAccess<? extends RealType<?>> p = imgB.randomAccess();
 
 			for (final Spot s : spots.getSpatialIndex(t))
 			{
@@ -150,37 +145,20 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 				s.localize(coords);
 				transform.apply(coords,coords);
 
-				pxCoords[0] = Math.round(coords[0]);
-				pxCoords[1] = Math.round(coords[1]);
-				pxCoords[2] = 0; //Math.round(coords[2]);
-				p.setPosition(pxCoords);
+				final int newz = corrector.suggestZ( (int)t,
+					(int)Math.round(coords[0]),
+					(int)Math.round(coords[1]) );
 
-				//scan along z and find slice with max intensity
-
-				//find the max intensity +-3px around the current z-coord
-				float val = 0;
-				final long zOrig = Math.round(coords[2]);
-				long zAtVal = zOrig;
-				for (long z = 0; z < 13; ++z)
+				if (newz > -1)
 				{
-					p.setPosition(z,2);
-					if (p.get().getRealFloat() > val)
-					{
-						val = p.get().getRealFloat();
-						zAtVal = z;
-					}
-				}
+					System.out.println("should shift from "+Util.printCoordinates(s)+" to newz="+newz);
 
-				//don't move if detection would suggest to move too far
-				if (Math.abs(zAtVal-zOrig) > 3)
-				{
-					zAtVal = zOrig;
-					s.setLabel( s.getLabel() + " noZ" );
-				}
-				else
-					s.setLabel( s.getLabel() + String.format(" %+dZ", zAtVal-zOrig) );
+					coords[2] = newz;
+					transform.applyInverse(coords,coords);
 
-				s.setPosition(zAtVal,2); //should go through transform...
+					s.setLabel( s.getLabel() + " Z" );
+					s.setPosition(coords[2],2);
+				}
 			}
 		}
 		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
