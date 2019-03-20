@@ -171,6 +171,8 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 			}
 		}
 		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
+		System.out.println("used (at least) "+corrector.usedSTpos.size()+" zShift hints");
+		corrector.reportUnusedCorrections();
 
 		this.context().getService(LogService.class).log().info("done z max crawler.");
 	}
