@@ -40,7 +40,8 @@ import net.imglib2.view.Views;
 public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 {
 	//"IDs" of all plug-ins wrapped in this class
-	private static final String SP_Z_SHIFT  = "SP-zshift";
+	private static final String SP_Z_SHIFT01  = "SP-zshift01";
+	private static final String SP_Z_SHIFT02  = "SP-zshift02";
 	private static final String SP_Z_SMOOTH = "SP-zsmooth";
 	private static final String SP_XY_SHIFT  = "SP-xyshift";
 	private static final String SP_XY_SMOOTH = "SP-xysmooth";
@@ -53,7 +54,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 		//the titles of the items are defined right below
 		return Arrays.asList(
 				menu( "Plugins",
-								item( SP_Z_SHIFT ), item( SP_Z_SMOOTH ),
+								item( SP_Z_SHIFT01 ), item( SP_Z_SHIFT02 ), item( SP_Z_SMOOTH ),
 								item( SP_XY_SHIFT ), item( SP_XY_SMOOTH ) ) );
 	}
 
@@ -61,7 +62,8 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	private static Map< String, String > menuTexts = new HashMap<>();
 	static
 	{
-		menuTexts.put( SP_Z_SHIFT,  "HARDCODED Z SHIFTS");
+		menuTexts.put( SP_Z_SHIFT01,  "HARDCODED Z SHIFTS for SEQ 01");
+		menuTexts.put( SP_Z_SHIFT02,  "HARDCODED Z SHIFTS for SEQ 02");
 		menuTexts.put( SP_Z_SMOOTH, "Shift points along z by z-coord smoothing");
 		menuTexts.put( SP_XY_SHIFT,  "Shift points along xy-gradients a little");
 		menuTexts.put( SP_XY_SMOOTH, "Shift points along xy by xy-coord smoothing");
@@ -74,7 +76,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	}
 	//------------------------------------------------------------------------
 
-	private final AbstractNamedAction actionZShift;
+	private final AbstractNamedAction actionZShift01,actionZShift02;
 	private final AbstractNamedAction actionZSmooth;
 	private final AbstractNamedAction actionXYShift;
 	private final AbstractNamedAction actionXYSmooth;
@@ -82,7 +84,8 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	/** default c'tor: creates Actions available from this plug-in */
 	public ShifterPlugin()
 	{
-		actionZShift  = new RunnableAction( SP_Z_SHIFT,  this::pointsZShifter );
+		actionZShift01  = new RunnableAction( SP_Z_SHIFT01,  this::pointsZShifter01 );
+		actionZShift02  = new RunnableAction( SP_Z_SHIFT02,  this::pointsZShifter02 );
 		actionZSmooth = new RunnableAction( SP_Z_SMOOTH, this::pointsZSmoother );
 		actionXYShift  = new RunnableAction( SP_XY_SHIFT,  this::pointsXYShifter);
 		actionXYSmooth = new RunnableAction( SP_XY_SMOOTH, this::pointsXYSmoother);
@@ -94,7 +97,8 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	public void installGlobalActions( final Actions actions )
 	{
 		final String[] noShortCut = new String[] {};
-		actions.namedAction( actionZShift,  noShortCut );
+		actions.namedAction( actionZShift01,  noShortCut );
+		actions.namedAction( actionZShift02,  noShortCut );
 		actions.namedAction( actionZSmooth, noShortCut );
 		actions.namedAction( actionXYShift,  noShortCut );
 		actions.namedAction( actionXYSmooth, noShortCut );
@@ -116,16 +120,20 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	private void updateEnabledActions()
 	{
 		final MamutAppModel appModel = ( pluginAppModel == null ) ? null : pluginAppModel.getAppModel();
-		actionZShift.setEnabled(  appModel != null );
+		actionZShift01.setEnabled(  appModel != null );
+		actionZShift02.setEnabled(  appModel != null );
 		actionZSmooth.setEnabled( appModel != null );
 		actionXYShift.setEnabled(  appModel != null );
 		actionXYSmooth.setEnabled( appModel != null );
 	}
 	//------------------------------------------------------------------------
 
-	private void pointsZShifter()
+	private void pointsZShifter01() { pointsZShifter(1); }
+	private void pointsZShifter02() { pointsZShifter(2); }
+
+	private void pointsZShifter(final int seq)
 	{
-		final Corrections corrector = new Corrections(2);
+		final Corrections corrector = new Corrections(seq);
 
 		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
 
