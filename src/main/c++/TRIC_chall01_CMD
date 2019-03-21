@@ -1,0 +1,11 @@
+echo -e '\
+005 12
+015 12
+033 12
+068 12
+080 08' \
+| { while read T Z; do
+	~/DATA/CTC2/TRIC_zShiftingTOsegMarkers/zMismatchDetector ../TRA/man_track${T}.tif  man_seg_${T}_0${Z}.tif $T $Z >> myLog.txt;
+	echo >> myLog.txt;
+done; }
+

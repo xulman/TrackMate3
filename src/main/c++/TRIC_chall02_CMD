@@ -1,0 +1,15 @@
+echo -e '\
+016 6
+044 4
+055 6
+083 6
+093 6
+110 2
+116 4
+131 2
+138 6
+148 6' \
+| { while read T Z; do
+	~/DATA/CTC2/TRIC_zShiftingTOsegMarkers/zMismatchDetector ../TRA/man_track${T}.tif  man_seg_${T}_00${Z}.tif $T $Z >> myLog.txt;
+	echo >> myLog.txt;
+done; }
