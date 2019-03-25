@@ -128,8 +128,8 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	}
 	//------------------------------------------------------------------------
 
-	private void pointsZShifter01() { pointsZShifter(1); }
-	private void pointsZShifter02() { pointsZShifter(2); }
+	private void pointsZShifter01() { pointsZShifter_AwayToNextIntInZ(1); }
+	private void pointsZShifter02() { pointsZShifter_AwayToNextIntInZ(2); }
 
 	private void pointsZShifter(final int seq)
 	{
@@ -159,6 +159,57 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 				if (newz > -1 && (double)newz != coords[2])
 				{
+					System.out.println(String.format("%03d: ",t)
+					  +"should shift from "+Util.printCoordinates(s)+" to newz="+newz);
+
+					coords[2] = newz;
+					transform.applyInverse(coords,coords);
+
+					s.setLabel( s.getLabel() + " Z" );
+					s.setPosition(coords[2],2);
+				}
+			}
+		}
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
+		System.out.println("used (at least) "+corrector.usedSTpos.size()+" zShift hints");
+		corrector.reportUnusedCorrections();
+
+		this.context().getService(LogService.class).log().info("done z max crawler.");
+	}
+
+	private void pointsZShifter_AwayToNextIntInZ(final int seq)
+	{
+		final Corrections corrector = new Corrections(seq);
+
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+
+		final double[] coords = new double[3];
+
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
+
+		for (Integer t : corrector.listTimePoints())
+		{
+			AffineTransform3D transform = new AffineTransform3D();
+			pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(t,0, transform);
+			transform = transform.inverse();
+
+			for (final Spot s : spots.getSpatialIndex(t))
+			{
+				//convert spot's coordinate into underlying image coordinate system
+				s.localize(coords);
+				transform.apply(coords,coords);
+
+				final boolean isHit = corrector.isHitXY( (int)t,
+					(int)Math.round(coords[0]),
+					(int)Math.round(coords[1]) );
+
+				if (isHit)
+				{
+					double newz = coords[2];
+					double nearestInt = Math.round(newz); //pixel in which I'm currently drawn, a bad one
+
+					newz = (newz >= nearestInt)? nearestInt+0.55 : nearestInt-0.55;
+
 					System.out.println(String.format("%03d: ",t)
 					  +"should shift from "+Util.printCoordinates(s)+" to newz="+newz);
 
