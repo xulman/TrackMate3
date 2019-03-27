@@ -208,7 +208,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 					double newz = coords[2];
 					double nearestInt = Math.round(newz); //pixel in which I'm currently drawn, a bad one
 
-					newz = (newz >= nearestInt)? nearestInt+0.55 : nearestInt-0.55;
+					newz = (nearestInt > newz)? nearestInt+0.05 : nearestInt-0.05;
 
 					System.out.println(String.format("%03d: ",t)
 					  +"should shift from "+Util.printCoordinates(s)+" to newz="+newz);
