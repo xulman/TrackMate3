@@ -397,4 +397,106 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 		this.context().getService(LogService.class).log().info("done xy grad crawler.");
 	}
+
+
+	private void pointsXYZShifter()
+	{
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+
+		final double[] coords = new double[3];
+		final long[] pxCoords = new long[3];
+
+		try{
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
+		BufferedWriter f = new BufferedWriter(new FileWriter("/Users/ulman/DATA/CTC2/grads.txt"));
+
+		for (int t = timeF; t <= timeT; ++t)
+		{
+			final AffineTransform3D transformImg2World = new AffineTransform3D();
+			pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(t,0, transformImg2World);
+			final AffineTransform3D transformWorld2Img = transformImg2World.inverse();
+
+			@SuppressWarnings("unchecked")
+			RandomAccessibleInterval<? extends RealType<?>> img = (RandomAccessibleInterval<? extends RealType<?>>) pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSource(t,0);
+			ExtendedRandomAccessibleInterval<? extends RealType<?>, ?> imgB = Views.extendBorder(img);
+			RandomAccess<? extends RealType<?>> p = imgB.randomAccess();
+
+			for (final Spot s : spots.getSpatialIndex(t))
+			{
+				//convert spot's coordinate into underlying image coordinate system
+				s.localize(coords);
+				transformWorld2Img.apply(coords,coords);
+
+				pxCoords[0] = Math.round(coords[0]);
+				pxCoords[1] = Math.round(coords[1]);
+				pxCoords[2] = Math.round(coords[2]);
+				p.setPosition(pxCoords);
+
+				float val;
+				int iters = 0;
+				do
+				{
+					//check values for xy gradient at this position
+					p.fwd(0);
+					float DX = p.get().getRealFloat();
+					p.move(-2,0);
+					DX -= p.get().getRealFloat();
+					p.fwd(0);
+
+					p.fwd(1);
+					float DY = p.get().getRealFloat();
+					p.move(-2,1);
+					DY -= p.get().getRealFloat();
+					p.fwd(1);
+
+					p.fwd(2);
+					float DZ = p.get().getRealFloat();
+					p.move(-2,2);
+					DZ -= p.get().getRealFloat();
+					p.fwd(2);
+
+					//sq. of gradient
+					val = (float)Math.sqrt( DX*DX + DY*DY + DZ*DZ ); // no normalization / 2.f;
+
+					f.write(s.getLabel()+" "+iters+" :\t"+val+"\t"+DX+"\t"+DY+"\t"+DZ+"\t\t"+pxCoords[0]+"\t"+pxCoords[1]+"\t"+pxCoords[2]);
+					f.newLine();
+
+					if (val > 20)
+					{
+						//we adjust, (DX,DY,DZ)/val is an unit sphere shift vector,
+						//by rounding its elements we actually choose one from 26 3D voxel neighbors
+						pxCoords[0] += Math.round(DX/val);
+						pxCoords[1] += Math.round(DY/val);
+						pxCoords[2] += Math.round(DZ/val);
+						p.setPosition(pxCoords);
+					}
+
+					++iters;
+				} while (val > 20 && iters < 0);
+
+				s.setLabel( s.getLabel() + String.format(" %dXYZ", iters) );
+
+				//convert spot's image coordinate into world coordinate
+				coords[0] = pxCoords[0];
+				coords[1] = pxCoords[1];
+				coords[2] = pxCoords[2];
+				transformImg2World.apply(coords,coords);
+
+				s.setPosition(coords[0],0);
+				s.setPosition(coords[1],1);
+				s.setPosition(coords[2],2);
+			}
+		}
+		f.close();
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
+		}
+		catch (IOException e)
+		{
+			e.printStackTrace();
+		}
+
+		this.context().getService(LogService.class).log().info("done xyz grad crawler.");
+	}
 }
