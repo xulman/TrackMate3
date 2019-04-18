@@ -227,6 +227,51 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 		this.context().getService(LogService.class).log().info("done z max crawler.");
 	}
+	//------------------------------------------------------------------------
+
+
+	private void pointsXYSmoother()
+	{
+		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
+		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
+		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
+
+		final ModelGraph modelGraph = pluginAppModel.getAppModel().getModel().getGraph();
+		final Link lRef = modelGraph.edgeRef();
+		final Spot[] ss = new Spot[2];
+		ss[0] = modelGraph.vertices().createRef();
+		ss[1] = modelGraph.vertices().createRef();
+
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
+
+		for (int t = timeF; t <= timeT; ++t)
+		{
+			for (final Spot s : spots.getSpatialIndex(t))
+			if ( (s.incomingEdges().size() + s.outgoingEdges().size()) == 2 )
+			{
+				int c=0;
+				for (int n=0; n < s.incomingEdges().size(); ++n)
+					s.incomingEdges().get(n, lRef).getSource( ss[c++] );
+
+				for (int n=0; n < s.outgoingEdges().size(); ++n)
+					s.outgoingEdges().get(n, lRef).getTarget( ss[c++] );
+
+				float avgC = s.getFloatPosition(0) + ss[0].getFloatPosition(0) + ss[1].getFloatPosition(0);
+				s.setPosition( avgC / 3.f, 0 );
+
+				avgC = s.getFloatPosition(1) + ss[0].getFloatPosition(1) + ss[1].getFloatPosition(1);
+				s.setPosition( avgC / 3.f, 1 );
+			}
+		}
+		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
+
+		modelGraph.releaseRef(lRef);
+		modelGraph.vertices().releaseRef(ss[0]);
+		modelGraph.vertices().releaseRef(ss[1]);
+
+		this.context().getService(LogService.class).log().info("done xy smoother.");
+	}
+
 
 	private void pointsZSmoother()
 	{
@@ -351,47 +396,5 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 		}
 
 		this.context().getService(LogService.class).log().info("done xy grad crawler.");
-	}
-
-	private void pointsXYSmoother()
-	{
-		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
-		final int timeF = pluginAppModel.getAppModel().getMinTimepoint();
-		final int timeT = pluginAppModel.getAppModel().getMaxTimepoint();
-
-		final ModelGraph modelGraph = pluginAppModel.getAppModel().getModel().getGraph();
-		final Link lRef = modelGraph.edgeRef();
-		final Spot[] ss = new Spot[2];
-		ss[0] = modelGraph.vertices().createRef();
-		ss[1] = modelGraph.vertices().createRef();
-
-		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
-
-		for (int t = timeF; t <= timeT; ++t)
-		{
-			for (final Spot s : spots.getSpatialIndex(t))
-			if ( (s.incomingEdges().size() + s.outgoingEdges().size()) == 2 )
-			{
-				int c=0;
-				for (int n=0; n < s.incomingEdges().size(); ++n)
-					s.incomingEdges().get(n, lRef).getSource( ss[c++] );
-
-				for (int n=0; n < s.outgoingEdges().size(); ++n)
-					s.outgoingEdges().get(n, lRef).getTarget( ss[c++] );
-
-				float avgC = s.getFloatPosition(0) + ss[0].getFloatPosition(0) + ss[1].getFloatPosition(0);
-				s.setPosition( avgC / 3.f, 0 );
-
-				avgC = s.getFloatPosition(1) + ss[0].getFloatPosition(1) + ss[1].getFloatPosition(1);
-				s.setPosition( avgC / 3.f, 1 );
-			}
-		}
-		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ finishImport(); }};
-
-		modelGraph.releaseRef(lRef);
-		modelGraph.vertices().releaseRef(ss[0]);
-		modelGraph.vertices().releaseRef(ss[1]);
-
-		this.context().getService(LogService.class).log().info("done xy smoother.");
 	}
 }
