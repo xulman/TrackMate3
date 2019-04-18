@@ -328,9 +328,9 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 		for (int t = timeF; t <= timeT; ++t)
 		{
-			AffineTransform3D transform = new AffineTransform3D();
-			pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(t,0, transform);
-			transform = transform.inverse();
+			final AffineTransform3D transformImg2World = new AffineTransform3D();
+			pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSourceTransform(t,0, transformImg2World);
+			final AffineTransform3D transformWorld2Img = transformImg2World.inverse();
 
 			@SuppressWarnings("unchecked")
 			RandomAccessibleInterval<? extends RealType<?>> img = (RandomAccessibleInterval<? extends RealType<?>>) pluginAppModel.getAppModel().getSharedBdvData().getSources().get(0).getSpimSource().getSource(t,0);
@@ -341,7 +341,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 			{
 				//convert spot's coordinate into underlying image coordinate system
 				s.localize(coords);
-				transform.apply(coords,coords);
+				transformWorld2Img.apply(coords,coords);
 
 				pxCoords[0] = Math.round(coords[0]);
 				pxCoords[1] = Math.round(coords[1]);
@@ -383,8 +383,15 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 				} while (val > 20 && iters < 7);
 
 				s.setLabel( s.getLabel() + String.format(" %dXY", iters) );
-				s.setPosition(pxCoords[0],0); //should go through transform...
-				s.setPosition(pxCoords[1],1); //should go through transform...
+
+				//convert spot's image coordinate into world coordinate
+				coords[0] = pxCoords[0];
+				coords[1] = pxCoords[1];
+				transformImg2World.apply(coords,coords);
+
+				s.setPosition(coords[0],0);
+				s.setPosition(coords[1],1);
+				s.setPosition(coords[2],2);
 			}
 		}
 		f.close();
