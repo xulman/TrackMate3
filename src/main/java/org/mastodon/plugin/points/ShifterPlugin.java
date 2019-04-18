@@ -450,6 +450,11 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 				pxCoords[2] = Math.round(coords[2]);
 				p.setPosition(pxCoords);
 
+				float lastVals[] = new float[4];
+				//lastVals[0] = lastVals[1] = lastVals[2] = lastVals[3] = -378932923;
+				int lastValIdx = 0;
+				boolean stopNow = false;
+
 				float val;
 				int iters = 0;
 				do
@@ -478,8 +483,10 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 					f.write(s.getLabel()+" "+iters+" :\t"+val+"\t"+DX+"\t"+DY+"\t"+DZ+"\t\t"+pxCoords[0]+"\t"+pxCoords[1]+"\t"+pxCoords[2]);
 					f.newLine();
+					//f.write(s.getLabel()+" "+iters+" :\t"+lastVals[0]+" "+lastVals[1]+" "+lastVals[2]+" "+lastVals[3]);
+					//f.newLine();
 
-					if (val > 20)
+					if (val != lastVals[0] && val != lastVals[1] && val != lastVals[2] && val != lastVals[3])
 					{
 						//we adjust, (DX,DY,DZ)/val is an unit sphere shift vector,
 						//by rounding its elements we actually choose one from 26 3D voxel neighbors
@@ -488,9 +495,16 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 						pxCoords[2] += Math.round(DZ/val);
 						p.setPosition(pxCoords);
 					}
+					else stopNow = true;
+
+					lastVals[lastValIdx % 4] = val;
+					++lastValIdx;
 
 					++iters;
-				} while (val > 20 && iters < 0);
+				} while (stopNow == false && iters < 10);
+
+				f.newLine();
+				f.newLine();
 
 				s.setLabel( s.getLabel() + String.format(" %dXYZ", iters) );
 
