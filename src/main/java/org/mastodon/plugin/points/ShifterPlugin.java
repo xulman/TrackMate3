@@ -43,8 +43,9 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	private static final String SP_Z_SHIFT01  = "SP-zshift01";
 	private static final String SP_Z_SHIFT02  = "SP-zshift02";
 	private static final String SP_Z_SMOOTH = "SP-zsmooth";
-	private static final String SP_XY_SHIFT  = "SP-xyshift";
 	private static final String SP_XY_SMOOTH = "SP-xysmooth";
+	private static final String SP_XY_SHIFT  = "SP-xyshift";
+	private static final String SP_XYZ_SHIFT  = "SP-xyzshift";
 	//------------------------------------------------------------------------
 
 	@Override
@@ -54,19 +55,21 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 		//the titles of the items are defined right below
 		return Arrays.asList(
 				menu( "Plugins",
-								item( SP_Z_SHIFT01 ), item( SP_Z_SHIFT02 ), item( SP_Z_SMOOTH ),
-								item( SP_XY_SHIFT ), item( SP_XY_SMOOTH ) ) );
+								item( SP_Z_SHIFT01 ), item( SP_Z_SHIFT02 ),
+								item( SP_Z_SMOOTH ), item( SP_XY_SMOOTH ),
+								item( SP_XY_SHIFT ), item( SP_XYZ_SHIFT ) ) );
 	}
 
 	/** titles of this plug-in's menu items */
 	private static Map< String, String > menuTexts = new HashMap<>();
 	static
 	{
-		menuTexts.put( SP_Z_SHIFT01,  "HARDCODED Z SHIFTS for SEQ 01");
-		menuTexts.put( SP_Z_SHIFT02,  "HARDCODED Z SHIFTS for SEQ 02");
-		menuTexts.put( SP_Z_SMOOTH, "Shift points along z by z-coord smoothing");
-		menuTexts.put( SP_XY_SHIFT,  "Shift points along xy-gradients a little");
+		menuTexts.put( SP_Z_SHIFT01, "HARDCODED Z SHIFTS for SEQ 01");
+		menuTexts.put( SP_Z_SHIFT02, "HARDCODED Z SHIFTS for SEQ 02");
+		menuTexts.put( SP_Z_SMOOTH,  "Shift points along z by z-coord smoothing");
 		menuTexts.put( SP_XY_SMOOTH, "Shift points along xy by xy-coord smoothing");
+		menuTexts.put( SP_XY_SHIFT,  "Shift points along xy-gradients a little");
+		menuTexts.put( SP_XYZ_SHIFT, "Shift points along xyz-gradients a little");
 	}
 
 	@Override
@@ -78,17 +81,19 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 	private final AbstractNamedAction actionZShift01,actionZShift02;
 	private final AbstractNamedAction actionZSmooth;
-	private final AbstractNamedAction actionXYShift;
 	private final AbstractNamedAction actionXYSmooth;
+	private final AbstractNamedAction actionXYShift;
+	private final AbstractNamedAction actionXYZShift;
 
 	/** default c'tor: creates Actions available from this plug-in */
 	public ShifterPlugin()
 	{
-		actionZShift01  = new RunnableAction( SP_Z_SHIFT01,  this::pointsZShifter01 );
-		actionZShift02  = new RunnableAction( SP_Z_SHIFT02,  this::pointsZShifter02 );
-		actionZSmooth = new RunnableAction( SP_Z_SMOOTH, this::pointsZSmoother );
-		actionXYShift  = new RunnableAction( SP_XY_SHIFT,  this::pointsXYShifter);
-		actionXYSmooth = new RunnableAction( SP_XY_SMOOTH, this::pointsXYSmoother);
+		actionZShift01 = new RunnableAction( SP_Z_SHIFT01, this::pointsZShifter01 );
+		actionZShift02 = new RunnableAction( SP_Z_SHIFT02, this::pointsZShifter02 );
+		actionZSmooth  = new RunnableAction( SP_Z_SMOOTH,  this::pointsZSmoother  );
+		actionXYSmooth = new RunnableAction( SP_XY_SMOOTH, this::pointsXYSmoother );
+		actionXYShift  = new RunnableAction( SP_XY_SHIFT,  this::pointsXYShifter  );
+		actionXYZShift = new RunnableAction( SP_XYZ_SHIFT, this::pointsXYZShifter );
 		updateEnabledActions();
 	}
 
@@ -96,12 +101,13 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	@Override
 	public void installGlobalActions( final Actions actions )
 	{
-		final String[] noShortCut = new String[] {};
-		actions.namedAction( actionZShift01,  noShortCut );
-		actions.namedAction( actionZShift02,  noShortCut );
-		actions.namedAction( actionZSmooth, noShortCut );
-		actions.namedAction( actionXYShift,  noShortCut );
+		final String[] noShortCut = new String[] { "not mapped" };
+		actions.namedAction( actionZShift01, noShortCut );
+		actions.namedAction( actionZShift02, noShortCut );
+		actions.namedAction( actionZSmooth,  noShortCut );
 		actions.namedAction( actionXYSmooth, noShortCut );
+		actions.namedAction( actionXYShift,  noShortCut );
+		actions.namedAction( actionXYZShift, noShortCut );
 	}
 
 	/** reference to the currently available project in Mastodon */
@@ -120,11 +126,12 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	private void updateEnabledActions()
 	{
 		final MamutAppModel appModel = ( pluginAppModel == null ) ? null : pluginAppModel.getAppModel();
-		actionZShift01.setEnabled(  appModel != null );
-		actionZShift02.setEnabled(  appModel != null );
-		actionZSmooth.setEnabled( appModel != null );
-		actionXYShift.setEnabled(  appModel != null );
+		actionZShift01.setEnabled( appModel != null );
+		actionZShift02.setEnabled( appModel != null );
+		actionZSmooth.setEnabled(  appModel != null );
 		actionXYSmooth.setEnabled( appModel != null );
+		actionXYShift.setEnabled(  appModel != null );
+		actionXYZShift.setEnabled( appModel != null );
 	}
 	//------------------------------------------------------------------------
 
@@ -176,6 +183,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 		this.context().getService(LogService.class).log().info("done z max crawler.");
 	}
+
 
 	private void pointsZShifter_AwayToNextIntInZ(final int seq)
 	{
@@ -313,6 +321,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 	}
 	//------------------------------------------------------------------------
 
+
 	private void pointsXYShifter()
 	{
 		final SpatioTemporalIndex< Spot > spots = pluginAppModel.getAppModel().getModel().getSpatioTemporalIndex();
@@ -417,7 +426,7 @@ public class ShifterPlugin extends AbstractContextual implements MastodonPlugin
 
 		try{
 		new AbstractModelImporter< Model >(pluginAppModel.getAppModel().getModel()) {{ startUpdate(); }};
-		BufferedWriter f = new BufferedWriter(new FileWriter("/Users/ulman/DATA/CTC2/grads.txt"));
+		BufferedWriter f = new BufferedWriter(new FileWriter("/tmp/grads.txt"));
 
 		for (int t = timeF; t <= timeT; ++t)
 		{
